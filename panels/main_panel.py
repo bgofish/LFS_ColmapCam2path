@@ -48,13 +48,13 @@ MODEL_NAME = "colmap_campath"
 
 # (name, is_int, min, max, step)
 _FIELD_SPEC_ORDER = [
-    ("fps",        True,  1.0,   240.0, 1.0),
+    ("fps",        False,  0.1,   30.0, 0.1),
     ("scale",      False, 0.1, 10, 0.1),
     ("sensor_mm",  False, 1.0,   100.0, 0.5),
     ("roll_deg",   False, -180.0, 180.0, 1.0),
 ]
 _FIELD_VALUE_DEFAULTS = {
-    "fps": 24.0, "scale": 1.0000, "sensor_mm": 36.0, "roll_deg": 63.0,
+    "fps": 1.0, "scale": 1.0000, "sensor_mm": 36.0, "roll_deg": 63.0,
 }
 
 _HARDCODED_DEFAULTS = {
@@ -224,7 +224,7 @@ def _natural_key(s):
 # ── Core conversion ───────────────────────────────────────────────────────────
 
 def convert(images_path: Path, cameras_path: Path, fps: float, sensor_mm: float,
-            focal_override_mm, scale: float, roll_deg: float = 90.0) -> dict:
+            focal_override_mm, scale: float, roll_deg: float ) -> dict:
     """Convert a COLMAP sparse model to an LFS camera-path dict."""
     cameras = _read_cameras_bin(cameras_path) if cameras_path.suffix == ".bin" else _read_cameras_txt(cameras_path)
     images = _read_images_bin(images_path) if images_path.suffix == ".bin" else _read_images_txt(images_path)

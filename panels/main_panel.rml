@@ -40,7 +40,7 @@
         <div class="field-row">
           <span class="field-label">FPS</span>
           <div class="slider-combo">
-            <input type="range" class="field-slider" min="1" max="240" step="1" data-value="fps"/>
+            <input type="range" class="field-slider" min="0.1" max="30" step="0.1" data-value="fps"/>
             <input type="text" class="field-input slider-text" data-value="fps_text"/>
           </div>
         </div>
