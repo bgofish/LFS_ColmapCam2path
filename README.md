@@ -1,5 +1,7 @@
 # ColmapCamPath
 
+<img width="577" height="926" alt="image" src="https://github.com/user-attachments/assets/8bc647f1-31ec-441c-824d-e7e70a711a1e" />
+
 Converts a COLMAP sparse reconstruction (`cameras.txt`/`.bin` + `images.txt`/`.bin`)
 into a LichtFeld Studio camera-path JSON, and loads it straight into the
 Sequencer.
@@ -13,8 +15,8 @@ Sequencer.
 2. **Conversion Options**: adjust FPS, Scale, Sensor width, Roll, and an
    optional focal-length override (leave blank to derive focal length from
    the COLMAP camera intrinsics).
-   - **Roll** rotates each camera about its own camera→target axis. LFS's
-     camera convention needs a +90° roll relative to COLMAP's by default —
+   - **Roll** rotates each camera about its own camera→target axis. My initial testing found LFS's
+     camera convention needs a +63° roll relative to COLMAP's  —
      change or zero it out if your result looks off.
 3. **Output**: set the output `.json` path (defaults to this plugin's
    Scripts folder) and click **Convert COLMAP → JSON**.
