@@ -1,0 +1,33 @@
+{
+  "output_filename": "colmap_camera_path.json",
+  "fields": {
+    "fps": {
+      "value": 24.0,
+      "min": 1.0,
+      "max": 240.0,
+      "step": 1.0,
+      "int": true
+    },
+    "scale": {
+      "value": 1.0,
+      "min": 0.001,
+      "max": 100.0,
+      "step": 0.01,
+      "int": false
+    },
+    "sensor_mm": {
+      "value": 36.0,
+      "min": 1.0,
+      "max": 100.0,
+      "step": 0.5,
+      "int": false
+    },
+    "roll_deg": {
+      "value": 90.0,
+      "min": -360.0,
+      "max": 360.0,
+      "step": 1.0,
+      "int": false
+    }
+  }
+}

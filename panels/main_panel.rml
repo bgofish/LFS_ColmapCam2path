@@ -1,0 +1,113 @@
+<rml>
+<head>
+  <link type="text/rcss" href="main_panel.rcss"/>
+</head>
+<body id="body" class="plugin-panel ColmapCamPath-panel" data-model="colmap_campath">
+  <div class="panel-shell">
+    <div class="panel-header">
+      <span class="panel-kicker">Camera Tools</span>
+      <span class="panel-title">COLMAP &#8594; LFS</span>
+      <span class="panel-note">Convert a COLMAP sparse reconstruction into a Sequencer camera path.</span>
+    </div>
+
+    <!-- ================= Source ================= -->
+    <div class="section">
+      <div class="section-header" data-event-click="sec_source = !sec_source">
+        <span class="section-arrow" data-class-open="sec_source">&#9656;</span>
+        <span class="section-title">COLMAP Source</span>
+      </div>
+      <div class="section-body" data-if="sec_source">
+        <div class="field-row">
+          <span class="field-label">Folder</span>
+          <input type="text" class="field-input wide" data-value="colmap_folder"
+                 title="Project folder, sparse/0 folder, or any folder containing cameras.txt/.bin + images.txt/.bin"/>
+        </div>
+        <div class="button-row">
+          <button id="btn-browse" class="action-button secondary">Browse&#8230;</button>
+        </div>
+        <p class="section-hint">Point this at the COLMAP project root, the sparse/0 folder, or anywhere containing cameras.txt/.bin + images.txt/.bin — subfolders are searched automatically.</p>
+        <p class="derived-text" data-if="found_text != ''">{{ found_text }}</p>
+      </div>
+    </div>
+
+    <!-- ================= Conversion Options ================= -->
+    <div class="section">
+      <div class="section-header" data-event-click="sec_options = !sec_options">
+        <span class="section-arrow" data-class-open="sec_options">&#9656;</span>
+        <span class="section-title">Conversion Options</span>
+      </div>
+      <div class="section-body" data-if="sec_options">
+        <div class="field-row">
+          <span class="field-label">FPS</span>
+          <div class="slider-combo">
+            <input type="range" class="field-slider" min="1" max="240" step="1" data-value="fps"/>
+            <input type="text" class="field-input slider-text" data-value="fps_text"/>
+          </div>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Scale</span>
+          <div class="slider-combo">
+            <input type="range" class="field-slider" min="0.1" max="10" step="0.1" data-value="scale"/>
+            <input type="text" class="field-input slider-text" data-value="scale_text"/>
+          </div>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Sensor (mm)</span>
+          <div class="slider-combo">
+            <input type="range" class="field-slider" min="1" max="100" step="0.5" data-value="sensor_mm"/>
+            <input type="text" class="field-input slider-text" data-value="sensor_mm_text"/>
+          </div>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Roll (deg)</span>
+          <div class="slider-combo">
+            <input type="range" class="field-slider" min="-180" max="180" step="1" data-value="roll_deg"/>
+            <input type="text" class="field-input slider-text" data-value="roll_deg_text"/>
+          </div>
+        </div>
+        <p class="section-hint">Roll rotates each camera about its own camera&#8594;target axis.</p>
+        <div class="field-row">
+          <span class="field-label">Focal override (mm)</span>
+          <input type="text" class="field-input wide" data-value="focal_override_text"
+                 title="Leave blank to derive focal length from COLMAP intrinsics"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= Output ================= -->
+    <div class="section">
+      <div class="section-header" data-event-click="sec_output = !sec_output">
+        <span class="section-arrow" data-class-open="sec_output">&#9656;</span>
+        <span class="section-title">Output</span>
+      </div>
+      <div class="section-body" data-if="sec_output">
+        <div class="field-row">
+          <span class="field-label">Output File (.json)</span>
+          <input type="text" class="field-input wide" data-value="output_path"/>
+        </div>
+        <button id="btn-convert" class="action-button primary">Convert COLMAP &#8594; JSON</button>
+      </div>
+    </div>
+
+    <!-- ================= Sequencer ================= -->
+    <div class="section">
+      <div class="section-header" data-event-click="sec_sequencer = !sec_sequencer">
+        <span class="section-arrow" data-class-open="sec_sequencer">&#9656;</span>
+        <span class="section-title">Sequencer</span>
+      </div>
+      <div class="section-body" data-if="sec_sequencer">
+        <p class="section-hint">Load into Sequencer automatically backs up the current path first, then overwrites it with the converted one.</p>
+        <div class="button-row">
+          <button id="btn-load" class="action-button">Load into Sequencer</button>
+          <button id="btn-backup" class="action-button secondary">Backup Sequencer Now</button>
+        </div>
+        <p class="derived-text" data-if="last_backup_text != ''">{{ last_backup_text }}</p>
+      </div>
+    </div>
+
+    <!-- ================= Status ================= -->
+    <p class="status-text" data-class-error="!status_ok" data-if="status != ''">{{ status }}</p>
+
+  </div>
+</body>
+</rml>
