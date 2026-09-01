@@ -1,29 +1,18 @@
 # ColmapCamPath
+<img width="1813" height="938" alt="image" src="https://github.com/user-attachments/assets/a4c09e7d-7c43-458f-bb1f-882743efeab5" />
 
-<img width="577" height="926" alt="image" src="https://github.com/user-attachments/assets/8bc647f1-31ec-441c-824d-e7e70a711a1e" />
-
-Converts a COLMAP sparse reconstruction (`cameras.txt`/`.bin` + `images.txt`/`.bin`)
-into a LichtFeld Studio camera-path JSON, and loads it straight into the
+Converts Scene cameras into a LichtFeld Studio camera-path JSON, and loads it straight into the
 Sequencer.
 
 ## Use
 
-1. **COLMAP Source → Folder**: click **Browse…** and pick the COLMAP project
-   folder (or paste a path directly into the field). You can point it at the
-   project root, the `sparse/0` folder, or anywhere in between — subfolders
-   are searched automatically (bounded depth) for `cameras.*` + `images.*`.
-2. **Conversion Options**: adjust FPS, Scale, Sensor width, Roll, and an
-   optional focal-length override (leave blank to derive focal length from
-   the COLMAP camera intrinsics).
-   - **Roll** rotates each camera about its own camera→target axis. My initial testing found LFS's
-     camera convention needs a +63° roll relative to COLMAP's  —
-     change or zero it out if your result looks off.
-3. **Output**: set the output `.json` path (defaults to this plugin's
-   Scripts folder) and click **Convert COLMAP → JSON**.
+1. **Conversion Options**: adjust FPS and select [Skip disabled cameras] if required
+2. **Output**: set the output `.json` path (defaults to this plugin's
+   Scripts folder) and click **Build Path → JSON**.
 4. **Sequencer**:
    - **Load into Sequencer** automatically backs up whatever camera path is
      currently in the Sequencer first, then loads the converted one in —
-     so a bad conversion never destroys existing work.
+     so an import never causes loss of existing work.
    - **Backup Sequencer Now** backs up the current path on demand, any
      time, independent of loading.
 
@@ -31,13 +20,3 @@ Backups are written as timestamped files under
 `~/.lichtfeld/plugins/ColmapCamPath/Scripts/backups/`, so nothing is ever
 silently overwritten.
 
-## Notes
-
-- The folder browser shells out to a short PowerShell script that pops a
-  native Windows Forms folder dialog (the same approach other LFS plugins
-  use) — Windows-only. On macOS/Linux, just paste the folder path into the
-  field directly — everything else works the same.
-- Coordinate conversion (COLMAP → LFS/SuperSplat axes) and camera model
-  handling (SIMPLE_PINHOLE, PINHOLE, SIMPLE_RADIAL, RADIAL, OPENCV, …) match
-  the standalone `COLMAP-CAM_to_LFS-PATH-json.py` converter this plugin
-  replaces.
