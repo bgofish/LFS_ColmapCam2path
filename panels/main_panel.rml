@@ -7,8 +7,8 @@
 
     <div class="panel-header">
       <span class="panel-kicker">Camera Tools</span>
-      <span class="panel-title">COLMAP &#8594; LFS</span>
-      <span class="panel-note">Build a Sequencer path from scene cameras using their COLMAP rotation.</span>
+      <span class="panel-title">Cameras &#8594; Sequencer-KeyFrames</span>
+      <span class="panel-note">Build a Sequencer path from scene cameras.</span>
     </div>
 
     <!-- ================= Options ================= -->
@@ -22,7 +22,7 @@
         <div class="field-row">
           <span class="field-label">FPS</span>
           <div class="slider-combo">
-            <input type="range" class="field-slider" min="0.1" max="120" step="0.1" data-value="fps"/>
+            <input type="range" class="field-slider" min="0.1" max="20" step="0.1" data-value="fps"/>
             <input type="text" class="field-input slider-text" data-value="fps_text"/>
           </div>
         </div>
@@ -72,11 +72,6 @@
           <button id="btn-backup" class="action-button secondary">Backup Now</button>
         </div>
         <p class="derived-text" data-if="last_backup_text != ''">{{ last_backup_text }}</p>
-
-        <div class="button-row">
-          <button id="btn-debug" class="action-button secondary">Debug: Log Scene Tree</button>
-        </div>
-        <p class="section-hint">After rotating/translating the scene, click this and check the LFS log to verify the world_transform is being read correctly.</p>
 
       </div>
     </div>

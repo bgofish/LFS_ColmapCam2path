@@ -75,210 +75,6 @@ def _tensor_to_list(t):
 
 # ── Training-enabled state ────────────────────────────────────────────────────
 
-def _debug_scene_tree() -> str:
-    """Log the first camera's raw data and show exactly what our pipeline
-    computes at each step.  Run this AFTER applying scene rotation/translation
-    so we can verify the world_transform composition."""
-    lines = []
-    try:
-        scene = lf.get_scene()
-        cams  = scene.get_active_cameras() if scene is not None else []
-        if not cams:
-            return "No cameras found."
-
-        cam  = cams[0]
-        name = getattr(cam, "name", "?")
-        lines.append(f"=== Camera: {name} ===")
-
-        # ── Raw COLMAP values ─────────────────────────────────────────────────
-        R_raw = _tensor_to_list(cam.camera_R)
-        t_raw = _tensor_to_list(cam.camera_T)
-        if R_raw and not isinstance(R_raw[0], (list, tuple)):
-            R_cw = [[float(R_raw[r*3+c]) for c in range(3)] for r in range(3)]
-        else:
-            R_cw = [[float(v) for v in row] for row in R_raw]
-        t_cw = [float(v) for v in t_raw]
-        lines.append(f"camera_R (R_cw): {R_cw}")
-        lines.append(f"camera_T (t_cw): {t_cw}")
-
-        # ── Step 1: COLMAP centre ─────────────────────────────────────────────
-        R_wc = [[R_cw[c][r] for c in range(3)] for r in range(3)]
-        Cx = -sum(R_wc[0][j]*t_cw[j] for j in range(3))
-        Cy = -sum(R_wc[1][j]*t_cw[j] for j in range(3))
-        Cz = -sum(R_wc[2][j]*t_cw[j] for j in range(3))
-        lines.append(f"Step1 COLMAP centre C: ({Cx:.4f}, {Cy:.4f}, {Cz:.4f})")
-
-        # ── Step 2: LFS flip ──────────────────────────────────────────────────
-        lfs_pos = (Cx, -Cy, -Cz)
-        qw, qx, qy, qz = _matrix_to_quat(R_cw)
-        lfs_rot = (qw, -qx, qy, qz)
-        lines.append(f"Step2 LFS pos (no scene xform): {[round(v,4) for v in lfs_pos]}")
-        lines.append(f"Step2 LFS rot (no scene xform): {[round(v,6) for v in lfs_rot]}")
-
-        # ── Step 3: world_transform ───────────────────────────────────────────
-        try:
-            wt_raw = cam.world_transform
-            if hasattr(wt_raw, "tolist"):
-                wt_raw = wt_raw.tolist()
-            W = [[float(wt_raw[r][c]) for c in range(4)] for r in range(4)]
-            lines.append(f"world_transform row0: {[round(v,6) for v in W[0]]}")
-            lines.append(f"world_transform row1: {[round(v,6) for v in W[1]]}")
-            lines.append(f"world_transform row2: {[round(v,6) for v in W[2]]}")
-            lines.append(f"world_transform row3: {[round(v,6) for v in W[3]]}")
-
-            W3 = [[W[r][c] for c in range(3)] for r in range(3)]
-            Wt_col = [W[r][3] for r in range(3)]   # translation in column 3
-            Wt_row = [W[3][c] for c in range(3)]   # translation in row 3
-            lines.append(f"Translation (col3): {[round(v,4) for v in Wt_col]}")
-            lines.append(f"Translation (row3): {[round(v,4) for v in Wt_row]}")
-
-            # Apply and log result both ways so we can see which is right
-            px, py, pz = lfs_pos
-            pos_col3 = (
-                W3[0][0]*px + W3[0][1]*py + W3[0][2]*pz + Wt_col[0],
-                W3[1][0]*px + W3[1][1]*py + W3[1][2]*pz + Wt_col[1],
-                W3[2][0]*px + W3[2][1]*py + W3[2][2]*pz + Wt_col[2],
-            )
-            # Apply and log result
-            px, py, pz = lfs_pos
-            pos_final = (
-                W3[0][0]*px + W3[0][1]*py + W3[0][2]*pz + Wt_col[0],
-                W3[1][0]*px + W3[1][1]*py + W3[1][2]*pz + Wt_col[1],
-                W3[2][0]*px + W3[2][1]*py + W3[2][2]*pz + Wt_col[2],
-            )
-            lines.append(f"Step3 pos with col3 trans: {[round(v,4) for v in pos_final]}")
-
-            # Rotation composition
-            qw2, qx2, qy2, qz2 = lfs_rot
-            R_lfs = _quat_to_matrix(qw2, qx2, qy2, qz2)
-            R_final = [[sum(W3[r][k]*R_lfs[k][c] for k in range(3)) for c in range(3)] for r in range(3)]
-            rot_final = _matrix_to_quat(R_final)
-            lines.append(f"Step3 rot final: {[round(v,6) for v in rot_final]}")
-            lines.append(f"KEYFRAME WILL BE: pos={[round(v,4) for v in pos_final]} rot={[round(v,6) for v in rot_final]}")
-
-            lines.append(f"world_transform col3 as position: {Wt_col}")
-            lines.append(f"world_transform row3 as position: {Wt_row}")
-
-        except Exception as e:
-            lines.append(f"world_transform read failed: {e}")
-
-        # ── All scene nodes with their transforms ─────────────────────────────
-        lines.append("--- All nodes ---")
-        for node in scene.get_nodes():
-            nname = getattr(node, "name", "?")
-            ntype = str(getattr(node, "type", "?"))
-            try:
-                matrix = lf.get_node_transform(nname)
-                d = lf.decompose_transform(matrix)
-                t = d.get("translation", [0,0,0])
-                r = d.get("rotation_euler_deg", [0,0,0])
-                s = d.get("scale", [1,1,1])
-                if any(abs(v) > 0.001 for v in list(t)+list(r)+[s[0]-1,s[1]-1,s[2]-1]):
-                    lines.append(f"  NON-IDENTITY [{ntype}] {nname!r}: t={[round(v,3) for v in t]} r={[round(v,3) for v in r]} s={[round(v,4) for v in s]}")
-            except Exception:
-                pass
-
-    except Exception as e:
-        lines.append(f"Debug failed: {e}")
-
-    for line in lines:
-        lf.log.info(f"ColmapDbg: {line}")
-
-    return f"Logged {len(lines)} lines — check LFS log for 'ColmapDbg:'."
-
-
-    """Walk every node in the scene and log its name, type, parent, and
-    raw decompose_transform() output.  Also probes the camera object for
-    any transform-related attributes beyond camera_R / camera_T.
-    Call this after rotating/translating the scene so we can see where
-    the applied transform actually lives."""
-    lines = []
-
-    # ── 1. All scene nodes ────────────────────────────────────────────────────
-    try:
-        scene = lf.get_scene()
-        nodes = scene.get_nodes()
-        lines.append(f"get_nodes() returned {len(nodes)} node(s)")
-        for node in nodes:
-            name     = getattr(node, "name",   "?")
-            ntype    = str(getattr(node, "type", "?"))
-            parent   = getattr(node, "parent", None)
-            pname    = getattr(parent, "name", str(parent)) if parent is not None else "None"
-
-            # Decompose via by-name lookup
-            try:
-                matrix = lf.get_node_transform(name)
-                d = lf.decompose_transform(matrix)
-            except Exception as e:
-                d = {"error": str(e)}
-
-            # Also try node.transform / node.world_transform directly
-            extra = {}
-            for attr in ("transform", "world_transform", "local_transform",
-                         "translation", "rotation", "scale", "matrix"):
-                v = getattr(node, attr, None)
-                if v is not None:
-                    extra[attr] = str(v)
-
-            lines.append(
-                f"  [{ntype}] {name!r}  parent={pname!r}"
-                f"  decompose={d}"
-                + (f"  extra={extra}" if extra else "")
-            )
-    except Exception as e:
-        lines.append(f"get_nodes() failed: {e}")
-
-    # ── 2. Camera object extra transform attributes ───────────────────────────
-    try:
-        cams = scene.get_active_cameras() if scene is not None else []
-        if cams:
-            cam = cams[0]
-            name = getattr(cam, "name", "?")
-            lines.append(f"Camera object {name!r} — probing transform attrs:")
-            for attr in ("transform", "world_transform", "local_transform",
-                         "node_transform", "scene_transform",
-                         "translation", "position", "rotation",
-                         "matrix", "pose", "extrinsic"):
-                try:
-                    v = getattr(cam, attr)
-                    if not callable(v):
-                        lines.append(f"    {attr} = {v}")
-                except Exception as e:
-                    pass   # silently skip missing attrs
-            # Try likely method names
-            for meth in ("get_transform", "get_world_transform",
-                         "get_node_transform", "get_pose", "get_extrinsic"):
-                fn = getattr(cam, meth, None)
-                if callable(fn):
-                    try:
-                        lines.append(f"    {meth}() = {fn()}")
-                    except Exception as e:
-                        lines.append(f"    {meth}() raised: {e}")
-    except Exception as e:
-        lines.append(f"Camera object probe failed: {e}")
-
-    for line in lines:
-        lf.log.info(f"ColmapCamPath tree — {line}")
-
-    return f"Logged {len(lines)} line(s) — check the LFS log."
-
-
-    """Return a set of camera names that are enabled for training.
-    Uses get_nodes() + node.training_enabled (same API as Cameras plugin)."""
-    try:
-        scene = lf.get_scene()
-        return {
-            node.name
-            for node in scene.get_nodes()
-            if str(node.type) == "NodeType.CAMERA" and node.training_enabled
-        }
-    except Exception as e:
-        lf.log.warn(f"ColmapCamPath: could not read training states — {e}")
-        return None   # None = unknown, caller treats all as enabled
-
-
-# ── Scene camera reading ──────────────────────────────────────────────────────
-
 def _training_enabled_set() -> set:
     """Return set of camera names enabled for training, or None on failure."""
     try:
@@ -348,37 +144,25 @@ def _get_scene_cameras(skip_disabled: bool) -> list:
             w  = int(getattr(cam, "camera_width", 1))
             focal_mm = round(_focal_to_mm(fx, w), 4)
 
-            # ── Read world_transform (scene-level rotation/translation/scale) ──
-            # world_transform is a 4x4 row-major matrix on the camera object,
-            # expressed in LFS space (after the COLMAP→LFS flip already applied).
-            # Compose it with the converted position and rotation so that any
-            # scene-level transform (rotate/translate/scale the camera group)
-            # is baked into the keyframe.
+            # ── Read world_transform and apply to COLMAP centre, then flip ────
+            # Apply W3 (as stored) * C_colmap + col3, then do the LFS Y/Z flip.
             try:
-                wt = cam.world_transform   # tuple-of-tuples 4x4
-                # Flatten to list-of-lists
+                wt = cam.world_transform
                 if hasattr(wt, "tolist"):
                     wt = wt.tolist()
                 W  = [[float(wt[r][c]) for c in range(4)] for r in range(4)]
                 W3 = [[W[r][c] for c in range(3)] for r in range(3)]
-                Wt = [W[r][3] for r in range(3)]
-                has_world = True
+                col3 = [W[r][3] for r in range(3)]
             except Exception:
-                W3 = [[1,0,0],[0,1,0],[0,0,1]]
-                Wt = [0.0, 0.0, 0.0]
-                has_world = False
+                W3   = [[1,0,0],[0,1,0],[0,0,1]]
+                col3 = [0.0, 0.0, 0.0]
 
-            # ── Apply world transform to position ────────────────────────────
-            # p_final = W3 · p_lfs + Wt
-            px, py, pz = lfs_pos
-            lfs_pos = (
-                W3[0][0]*px + W3[0][1]*py + W3[0][2]*pz + Wt[0],
-                W3[1][0]*px + W3[1][1]*py + W3[1][2]*pz + Wt[1],
-                W3[2][0]*px + W3[2][1]*py + W3[2][2]*pz + Wt[2],
-            )
+            Cx_w = W3[0][0]*Cx + W3[0][1]*Cy + W3[0][2]*Cz + col3[0]
+            Cy_w = W3[1][0]*Cx + W3[1][1]*Cy + W3[1][2]*Cz + col3[1]
+            Cz_w = W3[2][0]*Cx + W3[2][1]*Cy + W3[2][2]*Cz + col3[2]
+            lfs_pos = (Cx_w, -Cy_w, -Cz_w)
 
-            # ── Apply world transform to rotation ────────────────────────────
-            # R_final = W3 · R_lfs  (both expressed in LFS space)
+            # ── Rotation: apply W3 to R_lfs ───────────────────────────────────
             qw, qx, qy, qz = lfs_rot
             R_lfs = _quat_to_matrix(qw, qx, qy, qz)
             R_final = [[sum(W3[r][k]*R_lfs[k][c] for k in range(3))
@@ -424,15 +208,15 @@ def build_path(fps: float, skip_disabled: bool) -> dict:
 
 class MainPanel(lf.ui.Panel):
     id          = "ColmapCamPath.main_panel"
-    label       = "COLMAP to LFS"
+    label       = "Cam2Seq"
     space       = lf.ui.PanelSpace.MAIN_PANEL_TAB
     order       = 110
     template    = str(Path(__file__).resolve().with_name("main_panel.rml"))
     height_mode = lf.ui.PanelHeightMode.CONTENT
 
     def __init__(self):
-        self._fps           = 24.0
-        self._fps_text      = "24"
+        self._fps           = 2.0
+        self._fps_text      = "2"
         self._skip_disabled = True
         self._output_path   = str(_SCRIPTS_DIR / "colmap_camera_path.json")
 
@@ -526,7 +310,6 @@ class MainPanel(lf.ui.Panel):
             ("btn-build",    self._do_build),
             ("btn-load",     self._do_load),
             ("btn-backup",   self._do_backup),
-            ("btn-debug",    self._do_debug),
         ]:
             el = doc.get_element_by_id(btn_id)
             if el:
@@ -589,10 +372,6 @@ class MainPanel(lf.ui.Panel):
         except Exception as e:
             self._set_status(f"⚠ Load failed: {e}", False)
 
-    def _do_debug(self):
-        try:
-            msg = _debug_scene_tree()
-        except Exception as e:
             msg = f"Debug failed: {e}"
         self._set_status(msg)
 
