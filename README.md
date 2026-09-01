@@ -20,3 +20,7 @@ Backups are written as timestamped files under
 `~/.lichtfeld/plugins/ColmapCamPath/Scripts/backups/`, so nothing is ever
 silently overwritten.
 
+## Known issues
+
+1. If camera/point cloud is scaled/rotated/Translated then the created seq.keyframes are out of sync. This can be corrected by applying the same world transform to the seq.keyframes
+
