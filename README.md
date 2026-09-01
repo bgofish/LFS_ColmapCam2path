@@ -1,7 +1,7 @@
 # ColmapCamPath
 <img width="1813" height="938" alt="image" src="https://github.com/user-attachments/assets/a4c09e7d-7c43-458f-bb1f-882743efeab5" />
 
-Converts Scene cameras into a LichtFeld Studio camera-path JSON, and loads it straight into the
+Converts Scene cameras into a LichtFeld Studio camera-path JSON, and manual button to load it into the
 Sequencer.
 
 ## Use
