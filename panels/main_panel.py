@@ -181,27 +181,55 @@ def _get_scene_cameras(skip_disabled: bool) -> list:
     return result
 
 
-# ── Build path ────────────────────────────────────────────────────────────────
+# ── Build path(s) ────────────────────────────────────────────────────────────
 
-def build_path(fps: float, skip_disabled: bool) -> dict:
+def build_paths(fps: float, skip_disabled: bool, max_keyframes: int) -> list:
+    """Build one or more LFS camera-path dicts from scene cameras.
+
+    If max_keyframes is 0/None or >= the camera count, returns a single
+    dict with every camera. Otherwise the cameras are split into
+    consecutive chunks of at most max_keyframes each (in natural-sort
+    order) -- one dict per chunk. Each chunk's keyframe times restart at
+    0, so it plays back as a self-contained clip when loaded on its own.
+    """
     cameras = _get_scene_cameras(skip_disabled)
     if not cameras:
         raise ValueError("No cameras to export (all may be disabled for training).")
 
-    keyframes = []
-    for idx, cam in enumerate(cameras):
-        qw, qx, qy, qz = cam["rotation"]
-        pos = cam["position"]
-        keyframes.append({
-            "easing": 0,
-            "focal_length_mm": cam["focal_mm"],
-            "position": [round(pos[0], 6), round(pos[1], 6), round(pos[2], 6)],
-            "rotation": [round(qw, 6), round(qx, 6), round(qy, 6), round(qz, 6)],
-            "time": round(idx / fps, 6),
-        })
+    if not max_keyframes or max_keyframes <= 0 or max_keyframes >= len(cameras):
+        chunks = [cameras]
+    else:
+        chunks = [cameras[i:i + max_keyframes] for i in range(0, len(cameras), max_keyframes)]
 
-    clip_duration = max((kf["time"] for kf in keyframes), default=0.0)
-    return {"keyframes": keyframes, "version": 3}
+    results = []
+    for chunk in chunks:
+        keyframes = []
+        for idx, cam in enumerate(chunk):
+            qw, qx, qy, qz = cam["rotation"]
+            pos = cam["position"]
+            keyframes.append({
+                "easing": 0,
+                "focal_length_mm": cam["focal_mm"],
+                "position": [round(pos[0], 6), round(pos[1], 6), round(pos[2], 6)],
+                "rotation": [round(qw, 6), round(qx, 6), round(qy, 6), round(qz, 6)],
+                "time": round(idx / fps, 6),
+            })
+        clip_duration = max((kf["time"] for kf in keyframes), default=0.0)
+        results.append({"keyframes": keyframes, "version": 4, "clip_duration": clip_duration})
+    return results
+
+
+def part_output_path(base: Path, part_idx: int, num_parts: int) -> Path:
+    """Filename for part `part_idx` (1-based) of `num_parts`. Returns
+    `base` unchanged when num_parts <= 1 (no splitting needed); otherwise
+    appends a zero-padded _PtNN suffix before the extension, e.g.
+    colmap_camera_path.json -> colmap_camera_path_Pt01.json."""
+    if num_parts <= 1:
+        return base
+    stem = base.stem
+    suffix = base.suffix or ".json"
+    width = max(2, len(str(num_parts)))
+    return base.with_name(f"{stem}_Pt{part_idx:0{width}d}{suffix}")
 
 
 # ── Panel ─────────────────────────────────────────────────────────────────────
@@ -220,7 +248,15 @@ class MainPanel(lf.ui.Panel):
         self._skip_disabled = True
         self._output_path   = str(_SCRIPTS_DIR / "colmap_camera_path.json")
 
+        self._max_keyframes      = 400.0
+        self._max_keyframes_text = "400"
+
+        self._part      = 1.0   # 1-based index of the currently selected part
+        self._part_text = "1"
+        self._num_parts = 1     # how many part files the last Build produced
+
         self._cam_count_text   = ""
+        self._parts_info_text  = ""
         self._status           = ""
         self._status_ok        = True
         self._last_backup_text = ""
@@ -268,6 +304,34 @@ class MainPanel(lf.ui.Panel):
             return
 
         self._bind_numeric(model, "fps", is_int=False)
+        self._bind_numeric(model, "max_keyframes", is_int=True)
+
+        # Part selector: clamped to [1, num_parts] on every set, rather than
+        # a plain numeric bind, since num_parts changes after each Build and
+        # the buttons' step logic needs the same clamped-set behaviour.
+        def get_part(): return self._part
+        def set_part(v):
+            try:
+                iv = int(round(float(v)))
+            except (TypeError, ValueError):
+                return
+            self._set_part(iv)
+        model.bind("part", get_part, set_part)
+
+        def get_part_text(): return self._part_text
+        def set_part_text(v):
+            try:
+                iv = int(round(float(v)))
+            except (TypeError, ValueError):
+                self._part_text = str(v)  # let them keep typing; don't clamp mid-edit
+                if self._handle:
+                    self._handle.dirty("part_text")
+                return
+            self._set_part(iv)
+        model.bind("part_text", get_part_text, set_part_text)
+
+        model.bind_func("num_parts", lambda: self._num_parts)
+        model.bind_func("parts_info_text", lambda: self._parts_info_text)
 
         def get_skip():  return self._skip_disabled
         def set_skip(v): self._skip_disabled = bool(v)
@@ -302,6 +366,31 @@ class MainPanel(lf.ui.Panel):
         if self._handle:
             self._handle.dirty_all()
 
+    def _refresh_parts_info_text(self):
+        if self._num_parts <= 1:
+            self._parts_info_text = ""
+            return
+        base = Path(self._output_path.strip() or "colmap_camera_path.json")
+        target = part_output_path(base, int(self._part), self._num_parts)
+        self._parts_info_text = f"Part {int(self._part)} of {self._num_parts} — {target.name}"
+
+    def _set_part(self, iv: int):
+        """Clamp to [1, num_parts], update part/part_text/parts_info_text,
+        and push a redraw. Shared by the part field, and the prev/next
+        step buttons."""
+        iv = max(1, min(int(iv), max(1, self._num_parts)))
+        self._part = float(iv)
+        self._part_text = str(iv)
+        self._refresh_parts_info_text()
+        if self._handle:
+            self._handle.dirty_all()
+
+    def _do_part_prev(self):
+        self._set_part(int(round(self._part)) - 1)
+
+    def _do_part_next(self):
+        self._set_part(int(round(self._part)) + 1)
+
     # ── DOM ───────────────────────────────────────────────────────────────────
 
     def on_mount(self, doc):
@@ -310,6 +399,8 @@ class MainPanel(lf.ui.Panel):
             ("btn-build",    self._do_build),
             ("btn-load",     self._do_load),
             ("btn-backup",   self._do_backup),
+            ("btn-part-prev", self._do_part_prev),
+            ("btn-part-next", self._do_part_next),
         ]:
             el = doc.get_element_by_id(btn_id)
             if el:
@@ -348,32 +439,65 @@ class MainPanel(lf.ui.Panel):
         out = self._output_path.strip()
         if not out:
             self._set_status("⚠ No output path set.", False); return
+
         try:
-            data = build_path(fps=self._fps, skip_disabled=self._skip_disabled)
-            Path(out).parent.mkdir(parents=True, exist_ok=True)
-            with open(out, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+            max_kf = int(round(self._max_keyframes))
+        except (TypeError, ValueError):
+            max_kf = 0
+
+        try:
+            path_dicts = build_paths(fps=self._fps, skip_disabled=self._skip_disabled, max_keyframes=max_kf)
+            base = Path(out)
+            base.parent.mkdir(parents=True, exist_ok=True)
+            num_parts = len(path_dicts)
+            written = []
+            for i, data in enumerate(path_dicts, start=1):
+                target = part_output_path(base, i, num_parts)
+                with open(target, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                written.append((target, len(data["keyframes"])))
         except Exception as e:
             self._set_status(f"⚠ Build failed: {e}", False)
             lf.log.error(f"ColmapCamPath: build failed — {e}")
             return
-        n = len(data["keyframes"])
-        self._set_status(f"✓ Built {n} keyframes → {out}")
-        lf.log.info(f"ColmapCamPath: wrote {n} keyframes to {out!r}")
+
+        self._num_parts = num_parts
+        # Keep the current part selection if it's still in range, else reset to 1.
+        self._part = float(min(max(1, int(round(self._part))), num_parts))
+        self._part_text = str(int(self._part))
+
+        total_kf = sum(n for _, n in written)
+        self._refresh_parts_info_text()
+        if num_parts <= 1:
+            self._set_status(f"✓ Built {total_kf} keyframes → {written[0][0]}")
+        else:
+            self._set_status(f"✓ Built {num_parts} parts ({total_kf} keyframes total, max {max_kf}/part) → {base.parent}")
+
+        if self._handle:
+            self._handle.dirty_all()
+
+        lf.log.info(f"ColmapCamPath: wrote {num_parts} part(s), {total_kf} keyframes total")
 
     def _do_load(self):
         out = self._output_path.strip()
-        if not out or not Path(out).exists():
-            self._set_status("⚠ Nothing to load — run Build first.", False); return
+        if not out:
+            self._set_status("⚠ No output path set.", False); return
+
+        base = Path(out)
+        target = part_output_path(base, int(self._part), self._num_parts)
+        if not target.exists():
+            self._set_status(f"⚠ Nothing to load — run Build first ({target.name} not found).", False)
+            return
+
         self._write_backup()
         try:
-            lf.ui.load_camera_path(out)
-            self._set_status(f"✓ Loaded into Sequencer: {out}")
+            lf.ui.load_camera_path(str(target))
+            if self._num_parts > 1:
+                self._set_status(f"✓ Loaded Part {int(self._part)} of {self._num_parts}: {target}")
+            else:
+                self._set_status(f"✓ Loaded into Sequencer: {target}")
         except Exception as e:
             self._set_status(f"⚠ Load failed: {e}", False)
-
-            msg = f"Debug failed: {e}"
-        self._set_status(msg)
 
     def _do_backup(self):
         p = self._write_backup()

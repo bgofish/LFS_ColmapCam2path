@@ -147,6 +147,21 @@ body.plugin-panel {
     text-align: right;
 }
 
+.step-button {
+    padding: 6dp 12dp;
+    flex-grow: 0;
+    flex-shrink: 0;
+    min-width: 32dp;
+    text-align: center;
+}
+
+.step-value {
+    width: 48dp;
+    flex-grow: 0;
+    flex-shrink: 0;
+    text-align: center;
+}
+
 input.range {
     display: block;
     height: 16dp;

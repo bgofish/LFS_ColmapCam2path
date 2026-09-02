@@ -33,6 +33,15 @@
         </div>
         <p class="section-hint">When checked, cameras with &#8220;Disabled for Training&#8221; in the scene are excluded from the path.</p>
 
+        <div class="field-row">
+          <span class="field-label">Max Keyframes</span>
+          <div class="slider-combo">
+            <input type="range" class="field-slider" min="0" max="2000" step="1" data-value="max_keyframes"/>
+            <input type="text" class="field-input slider-text" data-value="max_keyframes_text"/>
+          </div>
+        </div>
+        <p class="section-hint">Splits the path into multiple files of at most this many cameras each (e.g. colmap_camera_path_Pt01.json, _Pt02.json, &#8230;). 0 = no limit, single file.</p>
+
       </div>
     </div>
 
@@ -66,6 +75,16 @@
         <span class="section-title">Sequencer</span>
       </div>
       <div class="section-body" data-if="sec_sequencer">
+
+        <div class="field-row" data-if="num_parts > 1">
+          <span class="field-label">Part</span>
+          <div class="slider-combo">
+            <button id="btn-part-prev" class="action-button secondary step-button">&#9664;</button>
+            <input type="text" class="field-input step-value" data-value="part_text"/>
+            <button id="btn-part-next" class="action-button secondary step-button">&#9654;</button>
+          </div>
+        </div>
+        <p class="derived-text" data-if="parts_info_text != ''">{{ parts_info_text }}</p>
 
         <div class="button-row">
           <button id="btn-load"   class="action-button">Load into Sequencer</button>
