@@ -1,6 +1,6 @@
 [project]
 name = "ColmapCamPath"
-version = "0.2.3"
+version = "0.2.4"
 description = "COLMAP -> LichtFeld Studio camera path converter"
 
 [tool.lichtfeld]
