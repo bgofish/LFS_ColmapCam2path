@@ -186,20 +186,34 @@ def _get_scene_cameras(skip_disabled: bool) -> list:
 def build_paths(fps: float, skip_disabled: bool, max_keyframes: int) -> list:
     """Build one or more LFS camera-path dicts from scene cameras.
 
-    If max_keyframes is 0/None or >= the camera count, returns a single
+    If max_keyframes is 0/1/None or >= the camera count, returns a single
     dict with every camera. Otherwise the cameras are split into
     consecutive chunks of at most max_keyframes each (in natural-sort
-    order) -- one dict per chunk. Each chunk's keyframe times restart at
-    0, so it plays back as a self-contained clip when loaded on its own.
+    order), with each part after the first REPEATING the previous part's
+    final camera as its own first camera -- a 1-keyframe overlap, so that
+    videos rendered from each part splice together seamlessly (part 1
+    ends on the same pose part 2 begins on, etc.) rather than skipping or
+    duplicating motion at the join. e.g. with max_keyframes=200: part 1 is
+    cameras 1-200, part 2 is cameras 200-400, part 3 is cameras 400-600.
+
+    Each chunk's keyframe times restart at 0, so it plays back as a
+    self-contained clip when loaded/rendered on its own.
     """
     cameras = _get_scene_cameras(skip_disabled)
     if not cameras:
         raise ValueError("No cameras to export (all may be disabled for training).")
 
-    if not max_keyframes or max_keyframes <= 0 or max_keyframes >= len(cameras):
+    n = len(cameras)
+    if not max_keyframes or max_keyframes <= 1 or max_keyframes >= n:
         chunks = [cameras]
     else:
-        chunks = [cameras[i:i + max_keyframes] for i in range(0, len(cameras), max_keyframes)]
+        num_logical_parts = math.ceil(n / max_keyframes)
+        chunks = []
+        for i in range(num_logical_parts):
+            base_start = i * max_keyframes
+            base_end = min((i + 1) * max_keyframes, n)
+            start = base_start - 1 if i > 0 else base_start  # repeat previous part's last camera
+            chunks.append(cameras[start:base_end])
 
     results = []
     for chunk in chunks:
