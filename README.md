@@ -1,5 +1,5 @@
 # ColmapCamPath
-<img width="1813" height="938" alt="image" src="https://github.com/user-attachments/assets/a4c09e7d-7c43-458f-bb1f-882743efeab5" />
+<img width="1997" height="1342" alt="image" src="https://github.com/user-attachments/assets/5213beec-b4ef-4ff0-98a6-8187731d9b14" />
 
 Converts Scene cameras into a LichtFeld Studio camera-path JSON, and manual button to load it into the
 Sequencer.
@@ -22,5 +22,7 @@ silently overwritten.
 
 ## Updates
 
-1. when camera/point cloud is scaled/rotated/Translated then the created seq.keyframes was out of sync. This is now corrected by applying the same world transform to the seq.keyframes.
+0.2.2 when camera/point cloud is scaled/rotated/Translated then the created seq.keyframes was out of sync. This is now corrected by applying the same world transform to the seq.keyframes.
+
+0.2.3  To avoid crashes with high camera counts the json files can be split into parts of a set number of keyframes & loaded one at at time manually
 
