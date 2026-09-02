@@ -183,7 +183,7 @@ def _get_scene_cameras(skip_disabled: bool) -> list:
 
 # ── Build path(s) ────────────────────────────────────────────────────────────
 
-def build_paths(fps: float, skip_disabled: bool, max_keyframes: int) -> list:
+def build_paths(fps: float, skip_disabled: bool, max_keyframes: int, ease_in_out: bool = False) -> list:
     """Build one or more LFS camera-path dicts from scene cameras.
 
     If max_keyframes is 0/1/None or >= the camera count, returns a single
@@ -197,7 +197,11 @@ def build_paths(fps: float, skip_disabled: bool, max_keyframes: int) -> list:
     cameras 1-200, part 2 is cameras 200-400, part 3 is cameras 400-600.
 
     Each chunk's keyframe times restart at 0, so it plays back as a
-    self-contained clip when loaded/rendered on its own.
+    self-contained clip when loaded/rendered on its own -- and, if
+    ease_in_out is set, each part gets its OWN ease in/out (first
+    keyframe easing=2, last easing=0, everything between easing=3) rather
+    than only the very first/last keyframe of the whole sequence, since
+    each part is rendered as its own independent clip.
     """
     cameras = _get_scene_cameras(skip_disabled)
     if not cameras:
@@ -218,11 +222,16 @@ def build_paths(fps: float, skip_disabled: bool, max_keyframes: int) -> list:
     results = []
     for chunk in chunks:
         keyframes = []
+        last_i = len(chunk) - 1
         for idx, cam in enumerate(chunk):
             qw, qx, qy, qz = cam["rotation"]
             pos = cam["position"]
+            if ease_in_out and last_i > 0:
+                easing = 3 if idx == 0 else (0 if idx == last_i else 3)
+            else:
+                easing = 0
             keyframes.append({
-                "easing": 0,
+                "easing": easing,
                 "focal_length_mm": cam["focal_mm"],
                 "position": [round(pos[0], 6), round(pos[1], 6), round(pos[2], 6)],
                 "rotation": [round(qw, 6), round(qx, 6), round(qy, 6), round(qz, 6)],
@@ -260,6 +269,7 @@ class MainPanel(lf.ui.Panel):
         self._fps           = 2.0
         self._fps_text      = "2"
         self._skip_disabled = True
+        self._ease_in_out   = False
         self._output_path   = str(_SCRIPTS_DIR / "colmap_camera_path.json")
 
         self._max_keyframes      = 400.0
@@ -350,6 +360,10 @@ class MainPanel(lf.ui.Panel):
         def get_skip():  return self._skip_disabled
         def set_skip(v): self._skip_disabled = bool(v)
         model.bind("skip_disabled", get_skip, set_skip)
+
+        def get_ease():  return self._ease_in_out
+        def set_ease(v): self._ease_in_out = bool(v)
+        model.bind("ease_in_out", get_ease, set_ease)
 
         def get_sec_options():  return self._sec_options
         def set_sec_options(v): self._sec_options = bool(v)
@@ -460,7 +474,8 @@ class MainPanel(lf.ui.Panel):
             max_kf = 0
 
         try:
-            path_dicts = build_paths(fps=self._fps, skip_disabled=self._skip_disabled, max_keyframes=max_kf)
+            path_dicts = build_paths(fps=self._fps, skip_disabled=self._skip_disabled,
+                                      max_keyframes=max_kf, ease_in_out=self._ease_in_out)
             base = Path(out)
             base.parent.mkdir(parents=True, exist_ok=True)
             num_parts = len(path_dicts)

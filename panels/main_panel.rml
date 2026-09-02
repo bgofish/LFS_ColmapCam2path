@@ -34,6 +34,12 @@
         <p class="section-hint">When checked, cameras with &#8220;Disabled for Training&#8221; in the scene are excluded from the path.</p>
 
         <div class="field-row">
+          <span class="field-label">Ease in/out</span>
+          <input type="checkbox" data-value="ease_in_out"/>
+        </div>
+        <p class="section-hint">When checked, each part's first keyframe eases in (2), the last eases out (0), and every keyframe in between eases through (3) — instead of the default constant speed (0) throughout.</p>
+
+        <div class="field-row">
           <span class="field-label">Max Keyframes</span>
           <div class="slider-combo">
             <input type="range" class="field-slider" min="0" max="2000" step="1" data-value="max_keyframes"/>
