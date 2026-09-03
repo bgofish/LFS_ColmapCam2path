@@ -21,9 +21,9 @@ Backups are written as timestamped files under
 silently overwritten.
 
 ## Updates
-0.2.6 **Added: Select Last Build Json Files** load json files if either a crash or just want to load files in another session. (Could also put in a browse for the "last_build_log.json" file) 
+0.2.6 **Added: Select Last Build Json Files** load json files if either a crash or just want to load files in another session. Or browse for the "last_build_log.json" file if you have saved to a different folder
 
-<img width="243" height="100" alt="image" src="https://github.com/user-attachments/assets/64d05f6d-e411-4d2d-8ee0-24ae72de0002" />
+<img width="286" height="110" alt="image" src="https://github.com/user-attachments/assets/00141351-f8b2-4be5-9d61-6ce33fc3fe9c" />
 
 0.2.5 **Improved Sliders & Defaults**: Changed to appearance & function of the sliders and lowered the defaults
 
