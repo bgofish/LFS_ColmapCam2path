@@ -16,6 +16,10 @@ import sys
 from pathlib import Path
 
 import lichtfeld as lf
+try:
+    from lfs_plugins import ScrubFieldController, ScrubFieldSpec
+except ImportError:
+    from lfs_plugins.scrub_fields import ScrubFieldController, ScrubFieldSpec
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _PLUGIN_DIR  = Path(__file__).resolve().parent.parent
@@ -23,6 +27,11 @@ _SCRIPTS_DIR = Path.home() / ".lichtfeld" / "plugins" / "ColmapCamPath" / "Scrip
 _BACKUP_DIR  = _SCRIPTS_DIR / "backups"
 
 MODEL_NAME = "colmap_campath"
+
+SCRUB_FIELDS = {
+    "fps":           ScrubFieldSpec(0.1, 5.0, 0.1, "%.1f", data_type=float),
+    "max_keyframes": ScrubFieldSpec(0.0, 500.0, 1.0, "%.0f", data_type=int),
+}
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -198,10 +207,10 @@ def build_paths(fps: float, skip_disabled: bool, max_keyframes: int, ease_in_out
 
     Each chunk's keyframe times restart at 0, so it plays back as a
     self-contained clip when loaded/rendered on its own -- and, if
-    ease_in_out is set, each part gets its OWN ease in/out (first
-    keyframe easing=2, last easing=0, everything between easing=3) rather
-    than only the very first/last keyframe of the whole sequence, since
-    each part is rendered as its own independent clip.
+    ease_in_out is set, each part gets its OWN ease in/out (every
+    keyframe easing=3 except the last, which is easing=0) rather than
+    only the very last keyframe of the whole sequence, since each part is
+    rendered as its own independent clip.
     """
     cameras = _get_scene_cameras(skip_disabled)
     if not cameras:
@@ -227,7 +236,7 @@ def build_paths(fps: float, skip_disabled: bool, max_keyframes: int, ease_in_out
             qw, qx, qy, qz = cam["rotation"]
             pos = cam["position"]
             if ease_in_out and last_i > 0:
-                easing = 3 if idx == 0 else (0 if idx == last_i else 3)
+                easing = 0 if idx == last_i else 3
             else:
                 easing = 0
             keyframes.append({
@@ -267,13 +276,17 @@ class MainPanel(lf.ui.Panel):
 
     def __init__(self):
         self._fps           = 2.0
-        self._fps_text      = "2"
         self._skip_disabled = True
         self._ease_in_out   = False
         self._output_path   = str(_SCRIPTS_DIR / "colmap_camera_path.json")
 
-        self._max_keyframes      = 400.0
-        self._max_keyframes_text = "400"
+        self._max_keyframes = 400.0
+
+        self._scrub_fields = ScrubFieldController(
+            SCRUB_FIELDS,
+            self._get_scrub_value,
+            self._set_scrub_value,
+        )
 
         self._part      = 1.0   # 1-based index of the currently selected part
         self._part_text = "1"
@@ -293,42 +306,39 @@ class MainPanel(lf.ui.Panel):
 
     # ── Model ─────────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _fmt(v, is_int):
-        if is_int:
-            return str(int(round(v)))
-        s = f"{round(v, 4):.4f}".rstrip("0").rstrip(".")
-        return s or "0"
+    def _get_scrub_value(self, prop: str) -> float:
+        if prop == "fps":
+            return float(self._fps)
+        if prop == "max_keyframes":
+            return float(self._max_keyframes)
+        return 0.0
 
-    def _bind_numeric(self, model, name, is_int):
-        float_attr = f"_{name}"
-        text_attr  = f"_{name}_text"
-
-        def sg(fa=float_attr):          return getattr(self, fa)
-        def ss(v, fa=float_attr, ta=text_attr, ii=is_int, nm=name):
-            try: fv = float(int(round(float(v)))) if ii else float(v)
-            except (TypeError, ValueError): return
-            setattr(self, fa, fv)
-            setattr(self, ta, self._fmt(fv, ii))
-            if self._handle: self._handle.dirty(f"{nm}_text")
-        model.bind(name, sg, ss)
-
-        def tg(ta=text_attr):           return getattr(self, ta)
-        def ts(v, fa=float_attr, ta=text_attr, ii=is_int, nm=name):
-            setattr(self, ta, str(v))
-            try: fv = float(int(round(float(v)))) if ii else float(v)
-            except (TypeError, ValueError): return
-            setattr(self, fa, fv)
-            if self._handle: self._handle.dirty(nm)
-        model.bind(f"{name}_text", tg, ts)
+    def _set_scrub_value(self, prop: str, value: float) -> None:
+        if prop == "fps":
+            self._fps = max(0.1, min(20.0, float(value)))
+            if self._handle:
+                self._handle.dirty("fps")
+            return
+        if prop == "max_keyframes":
+            self._max_keyframes = max(0.0, min(2000.0, float(int(round(float(value))))))
+            if self._handle:
+                self._handle.dirty("max_keyframes")
 
     def on_bind_model(self, ctx):
         model = ctx.create_data_model(MODEL_NAME)
         if model is None:
             return
 
-        self._bind_numeric(model, "fps", is_int=False)
-        self._bind_numeric(model, "max_keyframes", is_int=True)
+        model.bind(
+            "fps",
+            lambda: f"{self._fps:.1f}",
+            lambda value: self._set_scrub_value("fps", value),
+        )
+        model.bind(
+            "max_keyframes",
+            lambda: f"{self._max_keyframes:.0f}",
+            lambda value: self._set_scrub_value("max_keyframes", value),
+        )
 
         # Part selector: clamped to [1, num_parts] on every set, rather than
         # a plain numeric bind, since num_parts changes after each Build and
@@ -422,6 +432,8 @@ class MainPanel(lf.ui.Panel):
     # ── DOM ───────────────────────────────────────────────────────────────────
 
     def on_mount(self, doc):
+        self._scrub_fields.mount(doc)
+
         for btn_id, fn in [
             ("btn-refresh",  self._do_refresh),
             ("btn-build",    self._do_build),
@@ -439,6 +451,15 @@ class MainPanel(lf.ui.Panel):
                 el.add_event_listener("focus", lambda _ev, e=el: e.select() if hasattr(e, "select") else None)
         except Exception:
             pass
+
+    def on_update(self, doc):
+        del doc
+        return self._scrub_fields.sync_all()
+
+    def on_unmount(self, doc):
+        doc.remove_data_model(MODEL_NAME)
+        self._handle = None
+        self._scrub_fields.unmount()
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
