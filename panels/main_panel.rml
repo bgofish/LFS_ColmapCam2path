@@ -68,6 +68,7 @@
         <p class="derived-text" data-if="cam_count_text != ''">{{ cam_count_text }}</p>
 
         <button id="btn-build" class="action-button">Build Path &#8594; JSON</button>
+        <button id="btn-select-last" class="action-button secondary">Select Last Build Json Files</button>
 
       </div>
     </div>

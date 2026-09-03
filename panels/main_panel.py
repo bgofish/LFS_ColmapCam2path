@@ -25,6 +25,7 @@ except ImportError:
 _PLUGIN_DIR  = Path(__file__).resolve().parent.parent
 _SCRIPTS_DIR = Path.home() / ".lichtfeld" / "plugins" / "ColmapCamPath" / "Scripts"
 _BACKUP_DIR  = _SCRIPTS_DIR / "backups"
+_LOG_PATH    = _SCRIPTS_DIR / "last_build_log.json"
 
 MODEL_NAME = "colmap_campath"
 
@@ -437,6 +438,7 @@ class MainPanel(lf.ui.Panel):
         for btn_id, fn in [
             ("btn-refresh",  self._do_refresh),
             ("btn-build",    self._do_build),
+            ("btn-select-last", self._do_select_last),
             ("btn-load",     self._do_load),
             ("btn-backup",   self._do_backup),
             ("btn-part-prev", self._do_part_prev),
@@ -506,6 +508,7 @@ class MainPanel(lf.ui.Panel):
                 with open(target, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)
                 written.append((target, len(data["keyframes"])))
+            self._write_build_log(base, num_parts)
         except Exception as e:
             self._set_status(f"⚠ Build failed: {e}", False)
             lf.log.error(f"ColmapCamPath: build failed — {e}")
@@ -555,6 +558,57 @@ class MainPanel(lf.ui.Panel):
             self._set_status(f"✓ Backed up → {p.name}")
         else:
             self._set_status("⚠ Backup failed — is there a path in the Sequencer?", False)
+
+    def _write_build_log(self, base: Path, num_parts: int):
+        """Record the last successful Build so _do_select_last can restore
+        output_path/num_parts after a crash without re-running Build."""
+        import datetime
+        try:
+            _SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+            log = {
+                "output_path": str(base),
+                "num_parts": num_parts,
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            with open(_LOG_PATH, "w", encoding="utf-8") as f:
+                json.dump(log, f, indent=2)
+        except Exception as e:
+            lf.log.warn(f"ColmapCamPath: could not write build log — {e}")
+
+    def _do_select_last(self):
+        if not _LOG_PATH.exists():
+            self._set_status("⚠ No previous build log found.", False)
+            return
+        try:
+            with open(_LOG_PATH, "r", encoding="utf-8") as f:
+                log = json.load(f)
+            base = Path(log["output_path"])
+            num_parts = int(log["num_parts"])
+        except Exception as e:
+            self._set_status(f"⚠ Could not read build log: {e}", False)
+            return
+
+        missing = [part_output_path(base, i, num_parts).name
+                   for i in range(1, num_parts + 1)
+                   if not part_output_path(base, i, num_parts).exists()]
+        if len(missing) == num_parts:
+            self._set_status("⚠ None of the last build's part files exist on disk anymore.", False)
+            return
+
+        self._output_path = str(base)
+        self._num_parts    = num_parts
+        self._part         = 1.0
+        self._part_text    = "1"
+        self._refresh_parts_info_text()
+        if self._handle:
+            self._handle.dirty_all()
+
+        stamp = log.get("timestamp", "")
+        if missing:
+            self._set_status(
+                f"⚠ Selected last build ({stamp}) — {len(missing)} part(s) missing: {', '.join(missing)}", False)
+        else:
+            self._set_status(f"✓ Selected last build: {num_parts} part(s) from {stamp} — ready to Load.")
 
     def _write_backup(self):
         import datetime
