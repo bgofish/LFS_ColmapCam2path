@@ -21,6 +21,10 @@ Backups are written as timestamped files under
 silently overwritten.
 
 ## Updates
+0.2.6 **Added: Select Last Build Json Files** load json files if either a crash or just want to load files in another session. (Could also put in a browse for the "last_build_log.json" file) 
+
+<img width="243" height="100" alt="image" src="https://github.com/user-attachments/assets/64d05f6d-e411-4d2d-8ee0-24ae72de0002" />
+
 0.2.5 **Improved Sliders & Defaults**: Changed to appearance & function of the sliders and lowered the defaults
 
 0.2.4 **Ease in/out**: off by default (every keyframe eases at constant speed, `easing: 0`). When checked, each part gets its own ease in/out
