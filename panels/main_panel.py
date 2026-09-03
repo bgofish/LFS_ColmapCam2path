@@ -12,6 +12,7 @@ Coordinate conversion (verified against LFS probe):
 import json
 import math
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,6 +21,34 @@ try:
     from lfs_plugins import ScrubFieldController, ScrubFieldSpec
 except ImportError:
     from lfs_plugins.scrub_fields import ScrubFieldController, ScrubFieldSpec
+
+# ── File dialog (same PowerShell approach as GIS_Tools / CamPath-HTML) ────────
+_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+
+def _open_dialog(title, file_filter):
+    if sys.platform != "win32":
+        return None
+    ps_script = f'''
+    Add-Type -AssemblyName System.Windows.Forms
+    $d = New-Object System.Windows.Forms.OpenFileDialog
+    $d.Title = "{title}"
+    $d.Filter = "{file_filter}"
+    if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
+        Write-Output $d.FileName
+    }}
+    '''
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            capture_output=True, text=True,
+            creationflags=_SUBPROCESS_FLAGS,
+        )
+        path = result.stdout.strip()
+        return path if path else None
+    except Exception:
+        return None
+
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _PLUGIN_DIR  = Path(__file__).resolve().parent.parent
@@ -292,6 +321,7 @@ class MainPanel(lf.ui.Panel):
         self._part      = 1.0   # 1-based index of the currently selected part
         self._part_text = "1"
         self._num_parts = 1     # how many part files the last Build produced
+        self._log_browse_path = ""  # optional path to a non-default last_build_log.json
 
         self._cam_count_text   = ""
         self._parts_info_text  = ""
@@ -302,6 +332,7 @@ class MainPanel(lf.ui.Panel):
         self._sec_options   = True
         self._sec_output    = True
         self._sec_sequencer = True
+        self._sec_previous  = False
 
         self._handle = None
 
@@ -365,6 +396,10 @@ class MainPanel(lf.ui.Panel):
             self._set_part(iv)
         model.bind("part_text", get_part_text, set_part_text)
 
+        def get_log_browse():  return self._log_browse_path
+        def set_log_browse(v): self._log_browse_path = str(v)
+        model.bind("log_browse_path", get_log_browse, set_log_browse)
+
         model.bind_func("num_parts", lambda: self._num_parts)
         model.bind_func("parts_info_text", lambda: self._parts_info_text)
 
@@ -387,6 +422,10 @@ class MainPanel(lf.ui.Panel):
         def get_sec_seq():  return self._sec_sequencer
         def set_sec_seq(v): self._sec_sequencer = bool(v)
         model.bind("sec_sequencer", get_sec_seq, set_sec_seq)
+
+        def get_sec_prev():  return self._sec_previous
+        def set_sec_prev(v): self._sec_previous = bool(v)
+        model.bind("sec_previous", get_sec_prev, set_sec_prev)
 
         def get_out():  return self._output_path
         def set_out(v): self._output_path = str(v)
@@ -439,6 +478,8 @@ class MainPanel(lf.ui.Panel):
             ("btn-refresh",  self._do_refresh),
             ("btn-build",    self._do_build),
             ("btn-select-last", self._do_select_last),
+            ("btn-select-from-path", self._do_select_from_path),
+            ("btn-browse-log", self._do_browse_log),
             ("btn-load",     self._do_load),
             ("btn-backup",   self._do_backup),
             ("btn-part-prev", self._do_part_prev),
@@ -576,11 +617,28 @@ class MainPanel(lf.ui.Panel):
             lf.log.warn(f"ColmapCamPath: could not write build log — {e}")
 
     def _do_select_last(self):
-        if not _LOG_PATH.exists():
-            self._set_status("⚠ No previous build log found.", False)
+        self._load_build_log(_LOG_PATH)
+
+    def _do_select_from_path(self):
+        raw = self._log_browse_path.strip()
+        if not raw:
+            self._set_status("⚠ Enter a path to a last_build_log.json file first.", False)
+            return
+        self._load_build_log(Path(raw))
+
+    def _do_browse_log(self):
+        p = _open_dialog("Select last_build_log.json", "JSON files (*.json)|*.json")
+        if p:
+            self._log_browse_path = p
+            if self._handle:
+                self._handle.dirty("log_browse_path")
+
+    def _load_build_log(self, log_path: Path):
+        if not log_path.exists():
+            self._set_status(f"⚠ No build log found at {log_path}", False)
             return
         try:
-            with open(_LOG_PATH, "r", encoding="utf-8") as f:
+            with open(log_path, "r", encoding="utf-8") as f:
                 log = json.load(f)
             base = Path(log["output_path"])
             num_parts = int(log["num_parts"])

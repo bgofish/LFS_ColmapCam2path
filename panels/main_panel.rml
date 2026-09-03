@@ -68,7 +68,28 @@
         <p class="derived-text" data-if="cam_count_text != ''">{{ cam_count_text }}</p>
 
         <button id="btn-build" class="action-button">Build Path &#8594; JSON</button>
+
+      </div>
+    </div>
+
+    <!-- ================= Previous Runs ================= -->
+    <div class="section">
+      <div class="section-header" data-event-click="sec_previous = !sec_previous">
+        <span class="section-arrow" data-class-open="sec_previous">&#9656;</span>
+        <span class="section-title">Previous Runs</span>
+      </div>
+      <div class="section-body" data-if="sec_previous">
+
         <button id="btn-select-last" class="action-button secondary">Select Last Build Json Files</button>
+
+        <div class="field-row">
+          <span class="field-label">Log file path</span>
+          <input type="text" class="field-input wide" data-value="log_browse_path" placeholder="path to last_build_log.json"/>
+        </div>
+        <div class="button-row">
+          <button id="btn-browse-log" class="action-button secondary">Browse&#8230;</button>
+          <button id="btn-select-from-path" class="action-button secondary">Load From Log File&#8230;</button>
+        </div>
 
       </div>
     </div>
