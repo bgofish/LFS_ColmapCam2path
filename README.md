@@ -27,5 +27,5 @@ silently overwritten.
 
 0.2.3  To avoid crashes with high camera counts the json files can be split into parts of a set number of keyframes & loaded one at at time manually.  If you request 50 frames as the break - then 51 are created so a video created from each part can be spliced together
 
-0.2.4 2. **Ease in/out**: off by default (every keyframe eases at constant speed, `easing: 0`). When checked, each part gets its own ease in/out
+0.2.4 **Ease in/out**: off by default (every keyframe eases at constant speed, `easing: 0`). When checked, each part gets its own ease in/out
 
